@@ -35,11 +35,11 @@ const Index = () => {
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="container mx-auto p-4">
-        <div className="grid lg:grid-cols-[400px_1fr] gap-6 h-[calc(100vh-120px)]">
+      {/* Main Content - Fixed Grid Layout */}
+      <div className="container mx-auto p-4 h-[calc(100vh-120px)]">
+        <div className="grid grid-cols-1 lg:grid-cols-[350px_1fr] gap-6 h-full">
           {/* Left Sidebar - Portfolio Setup */}
-          <div className="space-y-4 overflow-y-auto">
+          <div className="overflow-y-auto">
             <PortfolioSetup
               onSimulationStart={handleSimulationStart}
               onSimulationComplete={handleSimulationComplete}

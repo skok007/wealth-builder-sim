@@ -24,19 +24,21 @@ export const PortfolioChart = ({ data }: PortfolioChartProps) => {
     }).format(value);
   };
 
+  // Get unique tickers for stacked areas
+  const tickers = data.tickers.map((t: any) => t.symbol);
+  const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00C49F', '#FFBB28', '#FF8042'];
+
   return (
     <div className="h-96">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
           <defs>
-            <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
-              <stop offset="95%" stopColor="#8884d8" stopOpacity={0.1}/>
-            </linearGradient>
-            <linearGradient id="benchmarkGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8}/>
-              <stop offset="95%" stopColor="#82ca9d" stopOpacity={0.1}/>
-            </linearGradient>
+            {tickers.map((ticker: string, index: number) => (
+              <linearGradient key={ticker} id={`gradient-${ticker}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={colors[index % colors.length]} stopOpacity={0.8}/>
+                <stop offset="95%" stopColor={colors[index % colors.length]} stopOpacity={0.3}/>
+              </linearGradient>
+            ))}
           </defs>
           <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
           <XAxis 
@@ -58,28 +60,38 @@ export const PortfolioChart = ({ data }: PortfolioChartProps) => {
             }}
           />
           <Legend />
-          <Area
-            type="monotone"
-            dataKey="portfolioValue"
-            stroke="#8884d8"
-            fillOpacity={1}
-            fill="url(#portfolioGradient)"
-            name="Portfolio Value"
-          />
-          <Area
+          
+          {/* Stacked areas for each ticker */}
+          {tickers.map((ticker: string, index: number) => (
+            <Area
+              key={ticker}
+              type="monotone"
+              dataKey={ticker}
+              stackId="1"
+              stroke={colors[index % colors.length]}
+              fill={`url(#gradient-${ticker})`}
+              name={ticker}
+            />
+          ))}
+          
+          {/* Benchmark as a line */}
+          <Line
             type="monotone"
             dataKey="benchmarkValue"
-            stroke="#82ca9d"
-            fillOpacity={1}
-            fill="url(#benchmarkGradient)"
+            stroke="#ff0000"
+            strokeDasharray="5 5"
+            strokeWidth={2}
             name={`${data.benchmark} Benchmark`}
+            dot={false}
           />
+          
+          {/* Total invested as a reference line */}
           <Line
             type="monotone"
             dataKey="totalInvested"
-            stroke="#ff7300"
-            strokeDasharray="5 5"
-            strokeWidth={2}
+            stroke="#888888"
+            strokeDasharray="2 2"
+            strokeWidth={1}
             name="Total Invested"
             dot={false}
           />
