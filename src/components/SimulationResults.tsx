@@ -1,10 +1,11 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PortfolioChart } from "@/components/PortfolioChart";
+import { TickerPerformanceChart } from "@/components/TickerPerformanceChart";
 import { MetricsDisplay } from "@/components/MetricsDisplay";
 import { ExportButton } from "@/components/ExportButton";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BarChart3, TrendingUp, Calculator } from "lucide-react";
+import { BarChart3, TrendingUp, Calculator, LineChart } from "lucide-react";
 
 interface SimulationResultsProps {
   data: any;
@@ -15,6 +16,14 @@ export const SimulationResults = ({ data, isLoading }: SimulationResultsProps) =
   if (isLoading) {
     return (
       <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-64 w-full" />
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <Skeleton className="h-6 w-48" />
@@ -54,16 +63,29 @@ export const SimulationResults = ({ data, isLoading }: SimulationResultsProps) =
         <ExportButton data={data} />
       </div>
 
-      {/* Portfolio Performance Chart */}
+      {/* Portfolio Value Over Time (Invested vs Growth) */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            Portfolio Performance Over Time
+            Portfolio Value Over Time
           </CardTitle>
         </CardHeader>
         <CardContent>
           <PortfolioChart data={data} />
+        </CardContent>
+      </Card>
+
+      {/* Individual Ticker Performance */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <LineChart className="h-5 w-5" />
+            Individual Ticker Performance
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TickerPerformanceChart data={data} />
         </CardContent>
       </Card>
 

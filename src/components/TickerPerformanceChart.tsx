@@ -1,12 +1,12 @@
 
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Line, LineChart } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
 
-interface PortfolioChartProps {
+interface TickerPerformanceChartProps {
   data: any;
 }
 
-export const PortfolioChart = ({ data }: PortfolioChartProps) => {
+export const TickerPerformanceChart = ({ data }: TickerPerformanceChartProps) => {
   if (!data?.portfolioData) return null;
 
   const chartData = data.portfolioData.map((point: any) => ({
@@ -24,20 +24,14 @@ export const PortfolioChart = ({ data }: PortfolioChartProps) => {
     }).format(value);
   };
 
+  // Get unique tickers for individual lines
+  const tickers = data.tickers.map((t: any) => t.symbol);
+  const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00C49F', '#FFBB28', '#FF8042'];
+
   return (
     <div className="h-96">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="investedGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#64748b" stopOpacity={0.8}/>
-              <stop offset="95%" stopColor="#64748b" stopOpacity={0.3}/>
-            </linearGradient>
-            <linearGradient id="growthGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.8}/>
-              <stop offset="95%" stopColor="#22c55e" stopOpacity={0.3}/>
-            </linearGradient>
-          </defs>
+        <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
           <XAxis 
             dataKey="date" 
@@ -59,26 +53,30 @@ export const PortfolioChart = ({ data }: PortfolioChartProps) => {
           />
           <Legend />
           
-          {/* Invested capital area */}
-          <Area
-            type="monotone"
-            dataKey="totalInvested"
-            stackId="1"
-            stroke="#64748b"
-            fill="url(#investedGradient)"
-            name="Invested Capital"
-          />
+          {/* Individual ticker lines */}
+          {tickers.map((ticker: string, index: number) => (
+            <Line
+              key={ticker}
+              type="monotone"
+              dataKey={ticker}
+              stroke={colors[index % colors.length]}
+              strokeWidth={2}
+              name={ticker}
+              dot={false}
+            />
+          ))}
           
-          {/* Growth area on top */}
-          <Area
+          {/* Benchmark line */}
+          <Line
             type="monotone"
-            dataKey="growth"
-            stackId="1"
-            stroke="#22c55e"
-            fill="url(#growthGradient)"
-            name="Growth"
+            dataKey="benchmarkValue"
+            stroke="#ff0000"
+            strokeDasharray="5 5"
+            strokeWidth={2}
+            name={`${data.benchmark} Benchmark`}
+            dot={false}
           />
-        </AreaChart>
+        </LineChart>
       </ResponsiveContainer>
     </div>
   );

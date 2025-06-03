@@ -32,9 +32,12 @@ export class SimulationEngine {
     
     // Get investment dates
     const investmentDates = getInvestmentDates(params.startDate, params.endDate, params.frequency);
+    console.log('Investment dates:', investmentDates);
     
-    // Calculate portfolio value over time
+    // Get all trading days from benchmark data
+    const benchmarkData = priceDataMap[params.benchmark];
     const portfolioData: any[] = [];
+    
     let totalInvested = 0;
     const holdings: { [symbol: string]: number } = {};
     
@@ -43,65 +46,73 @@ export class SimulationEngine {
       holdings[ticker.symbol] = 0;
     });
     
-    // Process each investment date
-    for (const investDate of investmentDates) {
-      totalInvested += params.investmentAmount;
+    // Process each trading day
+    for (const dataPoint of benchmarkData) {
+      const currentDate = dataPoint.date;
       
-      // Buy shares for each ticker based on weight
-      params.tickers.forEach(ticker => {
-        const investmentForTicker = params.investmentAmount * (ticker.weight / 100);
-        const priceAtDate = findClosestPrice(priceDataMap[ticker.symbol], investDate);
-        const sharesBought = investmentForTicker / priceAtDate;
-        holdings[ticker.symbol] += sharesBought;
-      });
-    }
-    
-    // Calculate portfolio value for each day
-    const benchmarkData = priceDataMap[params.benchmark];
-    const startBenchmarkPrice = benchmarkData[0].close;
-    
-    benchmarkData.forEach(benchmarkPoint => {
+      // Check if we should invest on this date
+      const shouldInvest = investmentDates.some(investDate => 
+        Math.abs(investDate.getTime() - currentDate.getTime()) < 24 * 60 * 60 * 1000
+      );
+      
+      if (shouldInvest) {
+        totalInvested += params.investmentAmount;
+        
+        // Buy shares for each ticker based on weight
+        params.tickers.forEach(ticker => {
+          const investmentForTicker = params.investmentAmount * (ticker.weight / 100);
+          const priceAtDate = findClosestPrice(priceDataMap[ticker.symbol], currentDate);
+          const sharesBought = investmentForTicker / priceAtDate;
+          holdings[ticker.symbol] += sharesBought;
+          console.log(`Bought ${sharesBought} shares of ${ticker.symbol} at $${priceAtDate}`);
+        });
+      }
+      
+      // Calculate current portfolio value
       let portfolioValue = 0;
       const tickerValues: { [symbol: string]: number } = {};
       
-      // Calculate cumulative values for stacked areas
-      let cumulativeValue = 0;
       params.tickers.forEach(ticker => {
-        const currentPrice = findClosestPrice(priceDataMap[ticker.symbol], benchmarkPoint.date);
+        const currentPrice = findClosestPrice(priceDataMap[ticker.symbol], currentDate);
         const tickerValue = holdings[ticker.symbol] * currentPrice;
-        cumulativeValue += tickerValue;
-        tickerValues[ticker.symbol] = cumulativeValue; // Cumulative for stacking
+        tickerValues[ticker.symbol] = tickerValue;
         portfolioValue += tickerValue;
       });
       
-      const benchmarkValue = (benchmarkPoint.close / startBenchmarkPrice) * totalInvested;
+      // Calculate benchmark value (if we had invested all money in benchmark)
+      const startBenchmarkPrice = benchmarkData[0].close;
+      const currentInvestedAmount = totalInvested;
+      const benchmarkValue = currentInvestedAmount > 0 ? 
+        (dataPoint.close / startBenchmarkPrice) * currentInvestedAmount : 0;
       
-      const currentInvested = totalInvested * (benchmarkPoint.date <= investmentDates[investmentDates.length - 1] ? 
-        investmentDates.filter(d => d <= benchmarkPoint.date).length / investmentDates.length : 1);
+      const growth = portfolioValue - currentInvestedAmount;
       
       portfolioData.push({
-        date: benchmarkPoint.date,
+        date: currentDate,
         portfolioValue,
+        totalInvested: currentInvestedAmount,
+        growth: Math.max(0, growth),
         benchmarkValue,
-        totalInvested: currentInvested,
         ...tickerValues
       });
-    });
+    }
     
     // Calculate metrics
     const finalPortfolioValue = portfolioData[portfolioData.length - 1].portfolioValue;
     const finalBenchmarkValue = portfolioData[portfolioData.length - 1].benchmarkValue;
-    const totalReturn = ((finalPortfolioValue - totalInvested) / totalInvested) * 100;
-    const benchmarkReturn = ((finalBenchmarkValue - totalInvested) / totalInvested) * 100;
+    const finalInvested = portfolioData[portfolioData.length - 1].totalInvested;
+    
+    const totalReturn = finalInvested > 0 ? ((finalPortfolioValue - finalInvested) / finalInvested) * 100 : 0;
+    const benchmarkReturn = finalInvested > 0 ? ((finalBenchmarkValue - finalInvested) / finalInvested) * 100 : 0;
     
     const years = (params.endDate.getTime() - params.startDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-    const cagr = (Math.pow(finalPortfolioValue / totalInvested, 1/years) - 1) * 100;
-    const benchmarkCAGR = (Math.pow(finalBenchmarkValue / totalInvested, 1/years) - 1) * 100;
+    const cagr = finalInvested > 0 ? (Math.pow(finalPortfolioValue / finalInvested, 1/years) - 1) * 100 : 0;
+    const benchmarkCAGR = finalInvested > 0 ? (Math.pow(finalBenchmarkValue / finalInvested, 1/years) - 1) * 100 : 0;
     
     return {
       portfolioData,
       metrics: {
-        totalInvested,
+        totalInvested: finalInvested,
         finalValue: finalPortfolioValue,
         totalReturn,
         cagr,
