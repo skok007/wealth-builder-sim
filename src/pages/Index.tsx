@@ -1,11 +1,60 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import { useState } from "react";
+import { PortfolioSetup } from "@/components/PortfolioSetup";
+import { SimulationResults } from "@/components/SimulationResults";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { TrendingUp } from "lucide-react";
 
 const Index = () => {
+  const [simulationData, setSimulationData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSimulationComplete = (data: any) => {
+    setSimulationData(data);
+    setIsLoading(false);
+  };
+
+  const handleSimulationStart = () => {
+    setIsLoading(true);
+    setSimulationData(null);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">Start building your amazing project here!</p>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <TrendingUp className="h-8 w-8 text-primary" />
+            <div>
+              <h1 className="text-2xl font-bold">Wealth Builder Simulator</h1>
+              <p className="text-sm text-muted-foreground">Learn investing through simulation</p>
+            </div>
+          </div>
+          <ThemeToggle />
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="container mx-auto p-4">
+        <div className="grid lg:grid-cols-[400px_1fr] gap-6 h-[calc(100vh-120px)]">
+          {/* Left Sidebar - Portfolio Setup */}
+          <div className="space-y-4 overflow-y-auto">
+            <PortfolioSetup
+              onSimulationStart={handleSimulationStart}
+              onSimulationComplete={handleSimulationComplete}
+              isLoading={isLoading}
+            />
+          </div>
+
+          {/* Right Main Area - Charts and Results */}
+          <div className="overflow-y-auto">
+            <SimulationResults 
+              data={simulationData}
+              isLoading={isLoading}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
