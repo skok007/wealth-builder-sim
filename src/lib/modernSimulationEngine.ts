@@ -10,6 +10,7 @@ export class ModernSimulationEngine {
     
     // Fetch real market data for all tickers
     const tickerData = await this.fetchMarketData(params.tickers);
+    console.log('Using real market returns:', tickerData);
     
     const portfolioData: SimulationDataPoint[] = [];
     const monthsInSimulation = params.simulationYears * 12;
@@ -42,15 +43,17 @@ export class ModernSimulationEngine {
         }
       }
       
-      // Calculate portfolio growth using real returns
+      // Calculate portfolio growth using REAL returns from Alpha Vantage
       portfolioValue = 0;
       const tickerValues: { [symbol: string]: number } = {};
       const realTickerValues: { [symbol: string]: number } = {};
       
       params.tickers.forEach(ticker => {
-        // Use real market return or fallback to expected return
-        const actualReturn = tickerData[ticker.symbol] || ticker.expectedReturn;
+        // Use REAL market return from Alpha Vantage API, fallback to expected return only if API failed
+        const actualReturn = tickerData[ticker.symbol] !== undefined ? tickerData[ticker.symbol] : ticker.expectedReturn;
         const monthlyReturn = actualReturn / 100 / 12;
+        
+        console.log(`${ticker.symbol}: Using ${actualReturn.toFixed(2)}% annual return (${(monthlyReturn * 100).toFixed(3)}% monthly)`);
         
         if (month > 0) {
           tickerHoldings[ticker.symbol] *= (1 + monthlyReturn);
@@ -94,6 +97,13 @@ export class ModernSimulationEngine {
     
     const inflationImpact = ((finalData.totalPortfolioValue - finalData.realPortfolioValue) / finalData.totalPortfolioValue) * 100;
     
+    console.log(`Final simulation results using real market data:`, {
+      totalReturn: totalReturn.toFixed(2) + '%',
+      realTotalReturn: realTotalReturn.toFixed(2) + '%',
+      cagr: cagr.toFixed(2) + '%',
+      realCAGR: realCAGR.toFixed(2) + '%'
+    });
+    
     return {
       portfolioData,
       metrics: {
@@ -120,23 +130,25 @@ export class ModernSimulationEngine {
   private async fetchMarketData(tickers: { symbol: string; weight: number; expectedReturn: number }[]): Promise<{ [symbol: string]: number }> {
     const results: { [symbol: string]: number } = {};
     
-    console.log('Fetching market data for tickers:', tickers.map(t => t.symbol));
+    console.log('Fetching real market data for tickers:', tickers.map(t => t.symbol));
     
     // Fetch data for each ticker in parallel
     const promises = tickers.map(async (ticker) => {
       try {
+        console.log(`Fetching real data for ${ticker.symbol}...`);
         const historicalData = await this.alphaVantage.fetchHistoricalData(ticker.symbol);
         const annualReturn = this.alphaVantage.calculateAnnualReturn(historicalData, 5);
         results[ticker.symbol] = annualReturn;
+        console.log(`${ticker.symbol}: Real 5-year return = ${annualReturn.toFixed(2)}%`);
       } catch (error) {
-        console.error(`Failed to fetch data for ${ticker.symbol}, using expected return`);
+        console.error(`Failed to fetch real data for ${ticker.symbol}, using expected return (${ticker.expectedReturn}%)`);
         results[ticker.symbol] = ticker.expectedReturn;
       }
     });
     
     await Promise.all(promises);
     
-    console.log('Market data results:', results);
+    console.log('Final market data results (real vs expected):', results);
     return results;
   }
 }
