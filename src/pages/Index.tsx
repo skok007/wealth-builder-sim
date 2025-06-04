@@ -1,22 +1,36 @@
 
-import { useState } from "react";
-import { PortfolioSetup } from "@/components/PortfolioSetup";
-import { SimulationResults } from "@/components/SimulationResults";
+import { useState, useEffect } from "react";
+import { ModernPortfolioSetup } from "@/components/ModernPortfolioSetup";
+import { ModernSimulationResults } from "@/components/ModernSimulationResults";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ModernSimulationEngine } from "@/lib/modernSimulationEngine";
+import { SimulationParams, SimulationResult } from "@/lib/types";
 import { TrendingUp } from "lucide-react";
 
 const Index = () => {
-  const [simulationData, setSimulationData] = useState(null);
+  const [simulationData, setSimulationData] = useState<SimulationResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [config, setConfig] = useState<SimulationParams | null>(null);
 
-  const handleSimulationComplete = (data: any) => {
-    setSimulationData(data);
-    setIsLoading(false);
-  };
+  const engine = new ModernSimulationEngine();
 
-  const handleSimulationStart = () => {
-    setIsLoading(true);
-    setSimulationData(null);
+  useEffect(() => {
+    if (config) {
+      setIsLoading(true);
+      try {
+        const results = engine.runSimulation(config);
+        setSimulationData(results);
+      } catch (error) {
+        console.error("Simulation failed:", error);
+        setSimulationData(null);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  }, [config]);
+
+  const handleConfigChange = (newConfig: SimulationParams) => {
+    setConfig(newConfig);
   };
 
   return (
@@ -27,8 +41,8 @@ const Index = () => {
           <div className="flex items-center gap-3">
             <TrendingUp className="h-8 w-8 text-primary" />
             <div>
-              <h1 className="text-2xl font-bold">Wealth Builder Simulator</h1>
-              <p className="text-sm text-muted-foreground">Learn investing through simulation</p>
+              <h1 className="text-2xl font-bold">Professional Wealth Simulator</h1>
+              <p className="text-sm text-muted-foreground">Investment simulation with inflation adjustment</p>
             </div>
           </div>
           <ThemeToggle />
@@ -37,19 +51,15 @@ const Index = () => {
 
       {/* Main Content - Fixed Grid Layout */}
       <div className="container mx-auto p-4 h-[calc(100vh-120px)]">
-        <div className="grid grid-cols-1 lg:grid-cols-[350px_1fr] gap-6 h-full">
+        <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6 h-full w-full">
           {/* Left Sidebar - Portfolio Setup */}
           <div className="overflow-y-auto">
-            <PortfolioSetup
-              onSimulationStart={handleSimulationStart}
-              onSimulationComplete={handleSimulationComplete}
-              isLoading={isLoading}
-            />
+            <ModernPortfolioSetup onConfigChange={handleConfigChange} />
           </div>
 
           {/* Right Main Area - Charts and Results */}
           <div className="overflow-y-auto">
-            <SimulationResults 
+            <ModernSimulationResults 
               data={simulationData}
               isLoading={isLoading}
             />

@@ -1,31 +1,51 @@
 
 export interface SimulationParams {
-  tickers: { symbol: string; weight: number }[];
-  investmentAmount: number;
-  frequency: string;
+  tickers: { symbol: string; weight: number; expectedReturn: number }[];
+  initialInvestment: number;
+  recurringInvestment: number;
+  contributionFrequency: 'monthly' | 'yearly';
+  simulationYears: number;
+  inflationRate: number;
   benchmark: string;
-  startDate: Date;
-  endDate: Date;
+}
+
+export interface SimulationDataPoint {
+  year: number;
+  date: Date;
+  totalPortfolioValue: number;
+  realPortfolioValue: number;
+  cumulativeInvestment: number;
+  realCumulativeInvestment: number;
+  tickerValues: { [symbol: string]: number };
+  realTickerValues: { [symbol: string]: number };
+  inflationFactor: number;
 }
 
 export interface SimulationMetrics {
   totalInvested: number;
   finalValue: number;
+  realFinalValue: number;
   totalReturn: number;
+  realTotalReturn: number;
   cagr: number;
-  benchmarkReturn: number;
-  benchmarkCAGR: number;
-  outperformance: number;
+  realCAGR: number;
+  inflationImpact: number;
 }
 
 export interface SimulationResult {
-  portfolioData: any[];
+  portfolioData: SimulationDataPoint[];
   metrics: SimulationMetrics;
-  tickers: { symbol: string; weight: number }[];
-  benchmark: string;
+  tickers: { symbol: string; weight: number; expectedReturn: number }[];
   settings: {
-    investmentAmount: number;
-    frequency: string;
-    period: string;
+    initialInvestment: number;
+    recurringInvestment: number;
+    contributionFrequency: string;
+    simulationYears: number;
+    inflationRate: number;
   };
+}
+
+export interface ChartTimeRange {
+  start: number;
+  end: number;
 }
