@@ -1,9 +1,15 @@
 
 import { SimulationParams, SimulationResult, SimulationDataPoint } from './types';
+import { AlphaVantageAPI } from './alphaVantageAPI';
 
 export class ModernSimulationEngine {
-  public runSimulation(params: SimulationParams): SimulationResult {
-    console.log('Running modern simulation with params:', params);
+  private alphaVantage = new AlphaVantageAPI();
+
+  public async runSimulation(params: SimulationParams): Promise<SimulationResult> {
+    console.log('Running modern simulation with real market data:', params);
+    
+    // Fetch real market data for all tickers
+    const tickerData = await this.fetchMarketData(params.tickers);
     
     const portfolioData: SimulationDataPoint[] = [];
     const monthsInSimulation = params.simulationYears * 12;
@@ -36,14 +42,16 @@ export class ModernSimulationEngine {
         }
       }
       
-      // Calculate portfolio growth
+      // Calculate portfolio growth using real returns
       portfolioValue = 0;
       const tickerValues: { [symbol: string]: number } = {};
       const realTickerValues: { [symbol: string]: number } = {};
       
       params.tickers.forEach(ticker => {
-        // Apply compounding growth to this ticker's holdings
-        const monthlyReturn = ticker.expectedReturn / 100 / 12;
+        // Use real market return or fallback to expected return
+        const actualReturn = tickerData[ticker.symbol] || ticker.expectedReturn;
+        const monthlyReturn = actualReturn / 100 / 12;
+        
         if (month > 0) {
           tickerHoldings[ticker.symbol] *= (1 + monthlyReturn);
         }
@@ -107,5 +115,28 @@ export class ModernSimulationEngine {
         inflationRate: params.inflationRate
       }
     };
+  }
+
+  private async fetchMarketData(tickers: { symbol: string; weight: number; expectedReturn: number }[]): Promise<{ [symbol: string]: number }> {
+    const results: { [symbol: string]: number } = {};
+    
+    console.log('Fetching market data for tickers:', tickers.map(t => t.symbol));
+    
+    // Fetch data for each ticker in parallel
+    const promises = tickers.map(async (ticker) => {
+      try {
+        const historicalData = await this.alphaVantage.fetchHistoricalData(ticker.symbol);
+        const annualReturn = this.alphaVantage.calculateAnnualReturn(historicalData, 5);
+        results[ticker.symbol] = annualReturn;
+      } catch (error) {
+        console.error(`Failed to fetch data for ${ticker.symbol}, using expected return`);
+        results[ticker.symbol] = ticker.expectedReturn;
+      }
+    });
+    
+    await Promise.all(promises);
+    
+    console.log('Market data results:', results);
+    return results;
   }
 }

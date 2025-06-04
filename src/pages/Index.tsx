@@ -17,15 +17,18 @@ const Index = () => {
   useEffect(() => {
     if (config) {
       setIsLoading(true);
-      try {
-        const results = engine.runSimulation(config);
-        setSimulationData(results);
-      } catch (error) {
-        console.error("Simulation failed:", error);
-        setSimulationData(null);
-      } finally {
-        setIsLoading(false);
-      }
+      // Run async simulation
+      engine.runSimulation(config)
+        .then(results => {
+          setSimulationData(results);
+        })
+        .catch(error => {
+          console.error("Simulation failed:", error);
+          setSimulationData(null);
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
     }
   }, [config]);
 
@@ -42,7 +45,7 @@ const Index = () => {
             <TrendingUp className="h-8 w-8 text-primary" />
             <div>
               <h1 className="text-2xl font-bold">Professional Wealth Simulator</h1>
-              <p className="text-sm text-muted-foreground">Investment simulation with inflation adjustment</p>
+              <p className="text-sm text-muted-foreground">Investment simulation with real market data & inflation adjustment</p>
             </div>
           </div>
           <ThemeToggle />
