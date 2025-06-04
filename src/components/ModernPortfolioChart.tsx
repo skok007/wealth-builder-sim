@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Line, LineChart } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Line, LineChart, ReferenceLine } from 'recharts';
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { SimulationResult, ChartTimeRange } from '@/lib/types';
@@ -28,12 +28,18 @@ export const ModernPortfolioChart = ({ data, showReal }: ModernPortfolioChartPro
 
   const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00C49F', '#FFBB28', '#FF8042'];
 
+  // Find the transition point between historical and forecast data
+  const transitionIndex = data.portfolioData.findIndex(point => point.isHistorical === false);
+  const transitionDate = transitionIndex > 0 ? data.portfolioData[transitionIndex - 1].date : null;
+
   // Process data for stacked areas
   const chartData = filteredData.map(point => {
     const result: any = {
       year: point.year,
-      date: point.date.toLocaleDateString(),
+      date: point.date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      fullDate: point.date,
       cumulativeInvestment: showReal ? point.realCumulativeInvestment : point.cumulativeInvestment,
+      isHistorical: point.isHistorical !== false,
     };
 
     // Add ticker values for stacking
@@ -49,7 +55,9 @@ export const ModernPortfolioChart = ({ data, showReal }: ModernPortfolioChartPro
     <div className="space-y-4">
       {/* Time Range Slider */}
       <div className="space-y-2">
-        <Label>Time Range: {data.portfolioData[timeRange.start]?.year.toFixed(1)} - {data.portfolioData[timeRange.end]?.year.toFixed(1)} years</Label>
+        <Label>
+          Time Range: {data.portfolioData[timeRange.start]?.date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} - {data.portfolioData[timeRange.end]?.date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+        </Label>
         <Slider
           value={[timeRange.start, timeRange.end]}
           onValueChange={(value) => setTimeRange({ start: value[0], end: value[1] })}
@@ -74,9 +82,11 @@ export const ModernPortfolioChart = ({ data, showReal }: ModernPortfolioChartPro
             </defs>
             <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
             <XAxis 
-              dataKey="year" 
+              dataKey="date" 
               tick={{ fontSize: 12 }}
-              tickFormatter={(value) => `${value.toFixed(0)}y`}
+              angle={-45}
+              textAnchor="end"
+              height={80}
             />
             <YAxis 
               tick={{ fontSize: 12 }}
@@ -84,7 +94,19 @@ export const ModernPortfolioChart = ({ data, showReal }: ModernPortfolioChartPro
             />
             <Tooltip
               formatter={(value: number, name: string) => [formatCurrency(value), name]}
-              labelFormatter={(label) => `Year ${Number(label).toFixed(1)}`}
+              labelFormatter={(label, payload) => {
+                if (payload && payload[0]) {
+                  const dataPoint = payload[0].payload;
+                  const dateStr = dataPoint.fullDate.toLocaleDateString('en-US', { 
+                    month: 'long', 
+                    day: 'numeric',
+                    year: 'numeric' 
+                  });
+                  const type = dataPoint.isHistorical ? 'Historical' : 'Forecast';
+                  return `${dateStr} (${type})`;
+                }
+                return label;
+              }}
               contentStyle={{
                 backgroundColor: 'hsl(var(--card))',
                 border: '1px solid hsl(var(--border))',
@@ -92,6 +114,17 @@ export const ModernPortfolioChart = ({ data, showReal }: ModernPortfolioChartPro
               }}
             />
             <Legend />
+            
+            {/* Reference line for historical/forecast transition */}
+            {transitionDate && (
+              <ReferenceLine 
+                x={transitionDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} 
+                stroke="#ff6b6b" 
+                strokeDasharray="8 8"
+                strokeWidth={2}
+                label={{ value: "Historical → Forecast", position: "top" }}
+              />
+            )}
             
             {/* Stacked areas for each ticker */}
             {data.tickers.map((ticker, index) => (

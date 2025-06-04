@@ -19,6 +19,7 @@ export interface SimulationDataPoint {
   tickerValues: { [symbol: string]: number };
   realTickerValues: { [symbol: string]: number };
   inflationFactor: number;
+  isHistorical?: boolean;
 }
 
 export interface SimulationMetrics {

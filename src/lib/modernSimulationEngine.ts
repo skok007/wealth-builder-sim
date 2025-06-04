@@ -1,4 +1,3 @@
-
 import { SimulationParams, SimulationResult, SimulationDataPoint } from './types';
 import { AlphaVantageAPI, HistoricalPrice } from './alphaVantageAPI';
 import { InflationAPI, InflationData } from './inflationAPI';
@@ -8,30 +7,40 @@ export class ModernSimulationEngine {
   private inflationAPI = new InflationAPI();
 
   public async runSimulation(params: SimulationParams, useRealInflation: boolean = false): Promise<SimulationResult> {
-    console.log('Running historical market simulation with real data:', params);
+    console.log('Running historical market simulation with real data and forecast:', params);
     
-    // Calculate date range for historical simulation
+    // Calculate periods: 2/3 historical, 1/3 forecast
+    const historicalYears = Math.floor(params.simulationYears * (2/3));
+    const forecastYears = params.simulationYears - historicalYears;
+    
+    console.log(`Historical period: ${historicalYears} years, Forecast period: ${forecastYears} years`);
+    
+    // Calculate date ranges
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setFullYear(startDate.getFullYear() - params.simulationYears);
+    startDate.setFullYear(startDate.getFullYear() - historicalYears);
+    const forecastEndDate = new Date();
+    forecastEndDate.setFullYear(forecastEndDate.getFullYear() + forecastYears);
     
-    console.log(`Simulating from ${startDate.toDateString()} to ${endDate.toDateString()}`);
+    console.log(`Historical: ${startDate.toDateString()} to ${endDate.toDateString()}`);
+    console.log(`Forecast: ${endDate.toDateString()} to ${forecastEndDate.toDateString()}`);
     
     // Fetch real historical market data for all tickers
-    const tickerHistoricalData = await this.fetchHistoricalMarketData(params.tickers, params.simulationYears);
+    const tickerHistoricalData = await this.fetchHistoricalMarketData(params.tickers, historicalYears);
     
     // Fetch real inflation data if requested
     let inflationData: InflationData[] = [];
     if (useRealInflation) {
-      inflationData = await this.inflationAPI.fetchHistoricalInflation(params.simulationYears + 1);
+      inflationData = await this.inflationAPI.fetchHistoricalInflation(historicalYears + 1);
     }
     
     const portfolioData: SimulationDataPoint[] = [];
     const monthsInSimulation = params.simulationYears * 12;
+    const historicalMonths = historicalYears * 12;
     
     let cumulativeInvestment = params.initialInvestment;
     
-    // Initialize ticker holdings in shares (not dollars) based on initial prices
+    // Initialize ticker holdings in shares based on initial prices
     const tickerShares: { [symbol: string]: number } = {};
     params.tickers.forEach(ticker => {
       const initialPrice = tickerHistoricalData[ticker.symbol]?.[0]?.close || 100;
@@ -39,10 +48,19 @@ export class ModernSimulationEngine {
       tickerShares[ticker.symbol] = initialInvestment / initialPrice;
     });
     
-    // Generate monthly data points using real historical prices
+    // Generate data points
     for (let month = 0; month <= monthsInSimulation; month++) {
+      const isHistorical = month <= historicalMonths;
       const currentDate = new Date(startDate);
-      currentDate.setMonth(currentDate.getMonth() + month);
+      
+      if (isHistorical) {
+        currentDate.setMonth(currentDate.getMonth() + month);
+      } else {
+        // Forecast period starts from endDate
+        const forecastMonth = month - historicalMonths;
+        currentDate.setTime(endDate.getTime());
+        currentDate.setMonth(currentDate.getMonth() + forecastMonth);
+      }
       
       // Add recurring investment
       if (month > 0) {
@@ -50,9 +68,19 @@ export class ModernSimulationEngine {
             (params.contributionFrequency === 'yearly' && month % 12 === 0)) {
           cumulativeInvestment += params.recurringInvestment;
           
-          // Buy more shares with new investment at current prices
+          // Buy more shares with new investment
           params.tickers.forEach(ticker => {
-            const currentPrice = this.getPriceAtDate(tickerHistoricalData[ticker.symbol], currentDate);
+            let currentPrice;
+            if (isHistorical) {
+              currentPrice = this.getPriceAtDate(tickerHistoricalData[ticker.symbol], currentDate);
+            } else {
+              // For forecast, use expected returns to project prices
+              const lastHistoricalPrice = this.getPriceAtDate(tickerHistoricalData[ticker.symbol], endDate);
+              const forecastMonths = month - historicalMonths;
+              const monthlyReturn = ticker.expectedReturn / 100 / 12;
+              currentPrice = lastHistoricalPrice * Math.pow(1 + monthlyReturn, forecastMonths);
+            }
+            
             const newInvestment = params.recurringInvestment * (ticker.weight / 100);
             const additionalShares = newInvestment / currentPrice;
             tickerShares[ticker.symbol] += additionalShares;
@@ -60,18 +88,26 @@ export class ModernSimulationEngine {
         }
       }
       
-      // Calculate portfolio value using REAL historical prices
+      // Calculate portfolio value
       let portfolioValue = 0;
       const tickerValues: { [symbol: string]: number } = {};
       const realTickerValues: { [symbol: string]: number } = {};
       
       params.tickers.forEach(ticker => {
-        const currentPrice = this.getPriceAtDate(tickerHistoricalData[ticker.symbol], currentDate);
+        let currentPrice;
+        if (isHistorical) {
+          currentPrice = this.getPriceAtDate(tickerHistoricalData[ticker.symbol], currentDate);
+        } else {
+          // For forecast, project prices using expected returns
+          const lastHistoricalPrice = this.getPriceAtDate(tickerHistoricalData[ticker.symbol], endDate);
+          const forecastMonths = month - historicalMonths;
+          const monthlyReturn = ticker.expectedReturn / 100 / 12;
+          currentPrice = lastHistoricalPrice * Math.pow(1 + monthlyReturn, forecastMonths);
+        }
+        
         const tickerValue = tickerShares[ticker.symbol] * currentPrice;
         tickerValues[ticker.symbol] = tickerValue;
         portfolioValue += tickerValue;
-        
-        console.log(`${ticker.symbol}: ${tickerShares[ticker.symbol].toFixed(2)} shares @ $${currentPrice.toFixed(2)} = $${tickerValue.toFixed(2)}`);
       });
       
       // Calculate inflation adjustment
@@ -79,7 +115,7 @@ export class ModernSimulationEngine {
       let realPortfolioValue = portfolioValue;
       let realCumulativeInvestment = cumulativeInvestment;
       
-      if (useRealInflation && inflationData.length > 0) {
+      if (useRealInflation && inflationData.length > 0 && isHistorical) {
         const periodStartDate = new Date(startDate);
         const avgInflation = this.inflationAPI.getInflationForPeriod(inflationData, periodStartDate, currentDate);
         const yearsPassed = month / 12;
@@ -106,7 +142,8 @@ export class ModernSimulationEngine {
         realCumulativeInvestment,
         tickerValues,
         realTickerValues,
-        inflationFactor
+        inflationFactor,
+        isHistorical
       });
     }
     
@@ -119,14 +156,6 @@ export class ModernSimulationEngine {
     const realCAGR = (Math.pow(finalData.realPortfolioValue / params.initialInvestment, 1 / params.simulationYears) - 1) * 100;
     
     const inflationImpact = ((finalData.totalPortfolioValue - finalData.realPortfolioValue) / finalData.totalPortfolioValue) * 100;
-    
-    console.log(`Final historical simulation results:`, {
-      totalReturn: totalReturn.toFixed(2) + '%',
-      realTotalReturn: realTotalReturn.toFixed(2) + '%',
-      cagr: cagr.toFixed(2) + '%',
-      realCAGR: realCAGR.toFixed(2) + '%',
-      inflationUsed: useRealInflation ? 'Real US CPI' : 'Fixed Rate'
-    });
     
     return {
       portfolioData,
