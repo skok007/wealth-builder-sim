@@ -20,9 +20,9 @@ export class AlphaVantageAPI {
   private apiKey = "ZA7JVSXE10LRWHF4";
   private baseUrl = "https://www.alphavantage.co/query";
 
-  async fetchHistoricalData(symbol: string): Promise<HistoricalPrice[]> {
+  async fetchHistoricalData(symbol: string, years: number = 5): Promise<HistoricalPrice[]> {
     try {
-      console.log(`Fetching historical data for ${symbol} from Alpha Vantage...`);
+      console.log(`Fetching ${years} years of historical data for ${symbol} from Alpha Vantage...`);
       
       const url = `${this.baseUrl}?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${this.apiKey}&outputsize=full`;
       
@@ -36,7 +36,7 @@ export class AlphaVantageAPI {
       
       if (!data["Time Series (Daily)"]) {
         console.warn(`No time series data found for ${symbol}, using fallback`);
-        return this.generateFallbackData(symbol);
+        return this.generateFallbackData(symbol, years);
       }
 
       const timeSeries = data["Time Series (Daily)"];
@@ -52,12 +52,25 @@ export class AlphaVantageAPI {
       // Sort by date (most recent first)
       prices.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
-      console.log(`Successfully fetched ${prices.length} data points for ${symbol}`);
-      return prices.slice(0, 1000); // Limit to last 1000 days
+      // Filter to last N years
+      const cutoffDate = new Date();
+      cutoffDate.setFullYear(cutoffDate.getFullYear() - years);
+      
+      const filteredPrices = prices.filter(price => new Date(price.date) >= cutoffDate);
+      
+      console.log(`Successfully fetched ${filteredPrices.length} data points for ${symbol} over ${years} years`);
+      return filteredPrices.reverse(); // Return chronological order (oldest first)
     } catch (error) {
       console.error(`Error fetching data for ${symbol}:`, error);
-      return this.generateFallbackData(symbol);
+      return this.generateFallbackData(symbol, years);
     }
+  }
+
+  getHistoricalPricesForSimulation(prices: HistoricalPrice[], startDate: Date, endDate: Date): HistoricalPrice[] {
+    return prices.filter(price => {
+      const priceDate = new Date(price.date);
+      return priceDate >= startDate && priceDate <= endDate;
+    });
   }
 
   calculateAnnualReturn(prices: HistoricalPrice[], years: number = 5): number {
@@ -65,27 +78,28 @@ export class AlphaVantageAPI {
 
     // Get prices from 'years' ago and current
     const daysInPeriod = Math.min(years * 252, prices.length - 1); // 252 trading days per year
-    const oldPrice = prices[daysInPeriod].close;
+    const oldPrice = prices[daysInPeriod]?.close || prices[prices.length - 1].close;
     const currentPrice = prices[0].close;
     
     const totalReturn = (currentPrice - oldPrice) / oldPrice;
     const annualReturn = (Math.pow(1 + totalReturn, 1 / years) - 1) * 100;
     
-    console.log(`${prices[0]?.date?.split('-')[0]} annual return for last ${years} years: ${annualReturn.toFixed(2)}%`);
+    console.log(`Annual return calculation: ${annualReturn.toFixed(2)}%`);
     return Math.max(annualReturn, -50); // Cap at -50% to avoid extreme values
   }
 
-  private generateFallbackData(symbol: string): HistoricalPrice[] {
-    console.log(`Generating fallback data for ${symbol}`);
+  private generateFallbackData(symbol: string, years: number): HistoricalPrice[] {
+    console.log(`Generating fallback data for ${symbol} over ${years} years`);
     const data: HistoricalPrice[] = [];
     const basePrice = this.getBasePrice(symbol);
+    const totalDays = years * 365;
     
     let currentPrice = basePrice;
     const dailyVolatility = 0.02;
     const annualReturn = this.getFallbackReturn(symbol);
-    const dailyReturn = Math.pow(1 + annualReturn / 100, 1/252) - 1;
+    const dailyReturn = Math.pow(1 + annualReturn / 100, 1/365) - 1;
     
-    for (let i = 0; i < 1000; i++) {
+    for (let i = totalDays; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       
