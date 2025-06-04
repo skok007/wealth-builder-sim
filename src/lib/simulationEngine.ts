@@ -1,131 +1,110 @@
 
-import { YahooFinanceAPI, PriceData } from './yahooFinanceAPI';
-import { SimulationParams, SimulationResult } from './types';
-import { getInvestmentDates } from './dateUtils';
-import { findClosestPrice } from './priceUtils';
+import { SimulationParams, SimulationResult, SimulationDataPoint } from './types';
 
 export class SimulationEngine {
-  private yahooAPI = new YahooFinanceAPI();
-
-  private async fetchStockData(symbol: string, startDate: Date, endDate: Date): Promise<PriceData[]> {
-    const period1 = Math.floor(startDate.getTime() / 1000);
-    const period2 = Math.floor(endDate.getTime() / 1000);
-    
-    return await this.yahooAPI.fetchStockData(symbol, period1, period2);
-  }
-
-  public async runSimulation(params: SimulationParams): Promise<SimulationResult> {
+  public runSimulation(params: SimulationParams): SimulationResult {
     console.log('Running simulation with params:', params);
     
-    // Fetch real price data for all tickers including benchmark
-    const allSymbols = [...params.tickers.map(t => t.symbol), params.benchmark];
-    const priceDataMap: { [symbol: string]: PriceData[] } = {};
+    const portfolioData: SimulationDataPoint[] = [];
+    const monthsInSimulation = params.simulationYears * 12;
     
-    try {
-      for (const symbol of allSymbols) {
-        priceDataMap[symbol] = await this.fetchStockData(symbol, params.startDate, params.endDate);
-      }
-    } catch (error) {
-      console.error('Error fetching price data:', error);
-      throw error;
-    }
+    let cumulativeInvestment = params.initialInvestment;
+    let portfolioValue = params.initialInvestment;
     
-    // Get investment dates
-    const investmentDates = getInvestmentDates(params.startDate, params.endDate, params.frequency);
-    console.log('Investment dates:', investmentDates);
-    
-    // Get all trading days from benchmark data
-    const benchmarkData = priceDataMap[params.benchmark];
-    const portfolioData: any[] = [];
-    
-    let totalInvested = 0;
-    const holdings: { [symbol: string]: number } = {};
-    
-    // Initialize holdings
+    // Initialize ticker holdings in dollars
+    const tickerHoldings: { [symbol: string]: number } = {};
     params.tickers.forEach(ticker => {
-      holdings[ticker.symbol] = 0;
+      tickerHoldings[ticker.symbol] = params.initialInvestment * (ticker.weight / 100);
     });
     
-    // Process each trading day
-    for (const dataPoint of benchmarkData) {
-      const currentDate = dataPoint.date;
+    for (let month = 0; month <= monthsInSimulation; month++) {
+      const year = month / 12;
+      const date = new Date();
+      date.setFullYear(date.getFullYear() + year);
       
-      // Check if we should invest on this date
-      const shouldInvest = investmentDates.some(investDate => 
-        Math.abs(investDate.getTime() - currentDate.getTime()) < 24 * 60 * 60 * 1000
-      );
-      
-      if (shouldInvest) {
-        totalInvested += params.investmentAmount;
-        
-        // Buy shares for each ticker based on weight
-        params.tickers.forEach(ticker => {
-          const investmentForTicker = params.investmentAmount * (ticker.weight / 100);
-          const priceAtDate = findClosestPrice(priceDataMap[ticker.symbol], currentDate);
-          const sharesBought = investmentForTicker / priceAtDate;
-          holdings[ticker.symbol] += sharesBought;
-          console.log(`Bought ${sharesBought} shares of ${ticker.symbol} at $${priceAtDate}`);
-        });
+      // Add recurring investment
+      if (month > 0) {
+        if (params.contributionFrequency === 'monthly' || 
+            (params.contributionFrequency === 'yearly' && month % 12 === 0)) {
+          cumulativeInvestment += params.recurringInvestment;
+          
+          // Distribute new investment according to weights
+          params.tickers.forEach(ticker => {
+            const newInvestment = params.recurringInvestment * (ticker.weight / 100);
+            tickerHoldings[ticker.symbol] += newInvestment;
+          });
+        }
       }
       
-      // Calculate current portfolio value
-      let portfolioValue = 0;
+      // Calculate portfolio growth
+      portfolioValue = 0;
       const tickerValues: { [symbol: string]: number } = {};
+      const realTickerValues: { [symbol: string]: number } = {};
       
       params.tickers.forEach(ticker => {
-        const currentPrice = findClosestPrice(priceDataMap[ticker.symbol], currentDate);
-        const tickerValue = holdings[ticker.symbol] * currentPrice;
+        // Apply compounding growth to this ticker's holdings
+        const monthlyReturn = ticker.expectedReturn / 100 / 12;
+        if (month > 0) {
+          tickerHoldings[ticker.symbol] *= (1 + monthlyReturn);
+        }
+        
+        const tickerValue = tickerHoldings[ticker.symbol];
         tickerValues[ticker.symbol] = tickerValue;
         portfolioValue += tickerValue;
       });
       
-      // Calculate benchmark value (if we had invested all money in benchmark)
-      const startBenchmarkPrice = benchmarkData[0].close;
-      const currentInvestedAmount = totalInvested;
-      const benchmarkValue = currentInvestedAmount > 0 ? 
-        (dataPoint.close / startBenchmarkPrice) * currentInvestedAmount : 0;
+      // Calculate inflation factor
+      const inflationFactor = Math.pow(1 + params.inflationRate / 100, year);
+      const realPortfolioValue = portfolioValue / inflationFactor;
+      const realCumulativeInvestment = cumulativeInvestment / inflationFactor;
       
-      const growth = portfolioValue - currentInvestedAmount;
+      // Calculate real ticker values
+      params.tickers.forEach(ticker => {
+        realTickerValues[ticker.symbol] = tickerValues[ticker.symbol] / inflationFactor;
+      });
       
       portfolioData.push({
-        date: currentDate,
-        portfolioValue,
-        totalInvested: currentInvestedAmount,
-        growth: Math.max(0, growth),
-        benchmarkValue,
-        ...tickerValues
+        year,
+        date,
+        totalPortfolioValue: portfolioValue,
+        realPortfolioValue,
+        cumulativeInvestment,
+        realCumulativeInvestment,
+        tickerValues,
+        realTickerValues,
+        inflationFactor
       });
     }
     
     // Calculate metrics
-    const finalPortfolioValue = portfolioData[portfolioData.length - 1].portfolioValue;
-    const finalBenchmarkValue = portfolioData[portfolioData.length - 1].benchmarkValue;
-    const finalInvested = portfolioData[portfolioData.length - 1].totalInvested;
+    const finalData = portfolioData[portfolioData.length - 1];
+    const totalReturn = ((finalData.totalPortfolioValue - finalData.cumulativeInvestment) / finalData.cumulativeInvestment) * 100;
+    const realTotalReturn = ((finalData.realPortfolioValue - finalData.realCumulativeInvestment) / finalData.realCumulativeInvestment) * 100;
     
-    const totalReturn = finalInvested > 0 ? ((finalPortfolioValue - finalInvested) / finalInvested) * 100 : 0;
-    const benchmarkReturn = finalInvested > 0 ? ((finalBenchmarkValue - finalInvested) / finalInvested) * 100 : 0;
+    const cagr = (Math.pow(finalData.totalPortfolioValue / params.initialInvestment, 1 / params.simulationYears) - 1) * 100;
+    const realCAGR = (Math.pow(finalData.realPortfolioValue / params.initialInvestment, 1 / params.simulationYears) - 1) * 100;
     
-    const years = (params.endDate.getTime() - params.startDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-    const cagr = finalInvested > 0 ? (Math.pow(finalPortfolioValue / finalInvested, 1/years) - 1) * 100 : 0;
-    const benchmarkCAGR = finalInvested > 0 ? (Math.pow(finalBenchmarkValue / finalInvested, 1/years) - 1) * 100 : 0;
+    const inflationImpact = ((finalData.totalPortfolioValue - finalData.realPortfolioValue) / finalData.totalPortfolioValue) * 100;
     
     return {
       portfolioData,
       metrics: {
-        totalInvested: finalInvested,
-        finalValue: finalPortfolioValue,
+        totalInvested: finalData.cumulativeInvestment,
+        finalValue: finalData.totalPortfolioValue,
+        realFinalValue: finalData.realPortfolioValue,
         totalReturn,
+        realTotalReturn,
         cagr,
-        benchmarkReturn,
-        benchmarkCAGR,
-        outperformance: totalReturn - benchmarkReturn
+        realCAGR,
+        inflationImpact
       },
       tickers: params.tickers,
-      benchmark: params.benchmark,
       settings: {
-        investmentAmount: params.investmentAmount,
-        frequency: params.frequency,
-        period: `${Math.round(years * 10) / 10} years`
+        initialInvestment: params.initialInvestment,
+        recurringInvestment: params.recurringInvestment,
+        contributionFrequency: params.contributionFrequency,
+        simulationYears: params.simulationYears,
+        inflationRate: params.inflationRate
       }
     };
   }
